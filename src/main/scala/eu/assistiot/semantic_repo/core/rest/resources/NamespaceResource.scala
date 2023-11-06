@@ -1,12 +1,13 @@
 package eu.assistiot.semantic_repo.core.rest.resources
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport.*
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{DateTime, StatusCodes}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.{Rejection, RejectionHandler, Route}
 import com.mongodb.client.result.DeleteResult
 import eu.assistiot.semantic_repo.core.AppConfig
 import eu.assistiot.semantic_repo.core.Exceptions.*
+import eu.assistiot.semantic_repo.core.controller.WebhookController
 import eu.assistiot.semantic_repo.core.datamodel.{ErrorResponse, MongoModel, SuccessResponse}
 import eu.assistiot.semantic_repo.core.datamodel.*
 import eu.assistiot.semantic_repo.core.rest.*
@@ -17,14 +18,18 @@ import fr.davit.akka.http.metrics.core.scaladsl.server.HttpMetricsDirectives.*
 import org.mongodb.scala.*
 import org.mongodb.scala.model.Filters as f
 import spray.json.DefaultJsonProtocol.*
+import spray.json.JsObject
 
 import scala.util.{Failure, Success, Try}
 import scala.util.matching.*
 
-object NamespaceResource extends MongoResource:
+object NamespaceResource:
   // Regex for matching valid namespace names
   final val nsRegexString = "^[a-zA-Z0-9][\\w-]{0,99}$"
   val nsRegex = nsRegexString.r
+
+class NamespaceResource(webhookContr: WebhookController) extends MongoResource:
+  import NamespaceResource.*
 
   private val innerRoute =
     getAllNamespacesRoute ~
@@ -143,7 +148,14 @@ object NamespaceResource extends MongoResource:
         }, None ).toFuture
 
         onComplete(transactionFuture) {
-          case Success(_) => complete(StatusCodes.OK, SuccessResponse(s"Deleted namespace '$namespacePath'."))
+          case Success(_) =>
+            webhookContr.dispatchWebhook(
+              MongoModel.WebhookAction.NamespaceDelete,
+              nc,
+              DateTime.now,
+              JsObject()
+            )
+            complete(StatusCodes.OK, SuccessResponse(s"Deleted namespace '$namespacePath'."))
           case Failure(NonEmptyEntityException(what)) =>
             complete(StatusCodes.BadRequest,
               ErrorResponse(s"Namespace '$namespacePath' is not empty. Please delete the $what first."))

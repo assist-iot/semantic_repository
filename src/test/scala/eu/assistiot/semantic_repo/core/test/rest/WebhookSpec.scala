@@ -9,7 +9,7 @@ import akka.http.scaladsl.unmarshalling.{FromResponseUnmarshaller, Unmarshal}
 import eu.assistiot.semantic_repo.core.{AppConfig, ControllerContainer, Guardian}
 import eu.assistiot.semantic_repo.core.datamodel.*
 import eu.assistiot.semantic_repo.core.rest.json.*
-import eu.assistiot.semantic_repo.core.rest.resources.{ContentResource, WebhookResource}
+import eu.assistiot.semantic_repo.core.rest.resources.{ContentResource, ModelResource, ModelVersionResource, NamespaceResource, WebhookResource}
 import eu.assistiot.semantic_repo.core.test.ApiSpec
 import org.scalatest.DoNotDiscover
 import org.scalatest.Inspectors
@@ -38,7 +38,10 @@ class WebhookSpec extends ApiSpec, ScalaFutures, Inspectors:
 
   override protected def getGuardian = Guardian(Some(receiveWebhook))
   val webhookRes = new WebhookResource(controllers.webhook)
-  val contentRes = new ContentResource(controllers.webhook)
+  val nsRoute = Route.seal(NamespaceResource(controllers.webhook).route)
+  val modelRoute = Route.seal(ModelResource(controllers.webhook).route)
+  val mvRoute = Route.seal(ModelVersionResource(controllers.webhook).route)
+  val contentRoute = Route.seal(ContentResource(controllers.webhook).route)
 
   def postWebhook[T: FromResponseUnmarshaller: ClassTag](statusCode: StatusCode, payload: Option[JsValue]): T =
     val request = payload match
@@ -208,30 +211,31 @@ class WebhookSpec extends ApiSpec, ScalaFutures, Inspectors:
     }
 
     "returning a single webhook" should {
-      "return an existing webhook" in {
-        // Create a new hook
-        val postResponse = postWebhook[WebhookCreatedInfo](StatusCodes.OK, Some(JsObject(
-          "action" -> JsString("content_upload"),
-          "callback" -> JsString("https://example.org/test"),
-          "context" -> JsObject(
-            "namespace" -> JsString("testo"),
-            "model" -> JsString("modelo"),
-            "version" -> JsString("versiono")
-          ),
-        )))
+      for whType <- MongoModel.WebhookAction.values do
+        f"return an existing webhook (${whType.key})" in {
+          // Create a new hook
+          val postResponse = postWebhook[WebhookCreatedInfo](StatusCodes.OK, Some(JsObject(
+            "action" -> JsString(whType.key),
+            "callback" -> JsString("https://example.org/test"),
+            "context" -> JsObject(
+              "namespace" -> JsString("testo"),
+              "model" -> JsString("modelo"),
+              "version" -> JsString("versiono")
+            ),
+          )))
 
-        Get("/webhook/" + postResponse.handle) ~> webhookRes.route ~> check {
-          status should be (StatusCodes.OK)
-          contentType should be (ContentTypes.`application/json`)
-          val response: WebhookClientModel = responseAs[WebhookClientModel]
-          response.id should be (postResponse.handle)
-          response.action should be ("content_upload")
-          response.callback should be ("https://example.org/test")
-          response.context.namespace should be (Some("testo"))
-          response.context.model should be (Some("modelo"))
-          response.context.version should be (Some("versiono"))
+          Get("/webhook/" + postResponse.handle) ~> webhookRes.route ~> check {
+            status should be (StatusCodes.OK)
+            contentType should be (ContentTypes.`application/json`)
+            val response: WebhookClientModel = responseAs[WebhookClientModel]
+            response.id should be (postResponse.handle)
+            response.action should be (whType.key)
+            response.callback should be ("https://example.org/test")
+            response.context.namespace should be (Some("testo"))
+            response.context.model should be (Some("modelo"))
+            response.context.version should be (Some("versiono"))
+          }
         }
-      }
 
       "not return a webhook with ID in a wrong format" in {
         Get("/webhook/123") ~> Route.seal(webhookRes.route) ~> check {
@@ -369,14 +373,14 @@ class WebhookSpec extends ApiSpec, ScalaFutures, Inspectors:
       ("https://example.org/test1", JsObject()),
       ("http://localhost/hook2", JsObject()),
       ("https://example.org/namespaceHook", JsObject(
-        "namespace" -> JsString("test"),
+        "namespace" -> JsString("hook_ns"),
       )),
       ("https://example.org/modelHook", JsObject(
-        "namespace" -> JsString("test"),
+        "namespace" -> JsString("hook_ns"),
         "model" -> JsString("model"),
       )),
       ("https://example.org/versionHook", JsObject(
-        "namespace" -> JsString("test"),
+        "namespace" -> JsString("hook_ns"),
         "model" -> JsString("model"),
         "version" -> JsString("1"),
       )),
@@ -385,6 +389,17 @@ class WebhookSpec extends ApiSpec, ScalaFutures, Inspectors:
     "when executing webhooks" should {
       "execute content_upload hooks" in {
         receivedHooks.clear()
+
+        // Prepare the namespace
+        Post("/m/hook_ns") ~> nsRoute ~> check {
+          status should (be (StatusCodes.OK) or be (StatusCodes.Conflict))
+        }
+        Post("/m/hook_ns/model") ~> modelRoute ~> check {
+          status should (be (StatusCodes.OK) or be (StatusCodes.Conflict))
+        }
+        Post("/m/hook_ns/model/1") ~> mvRoute ~> check {
+          status should (be (StatusCodes.OK) or be (StatusCodes.Conflict))
+        }
 
         val expectedHooks = for (callback, context) <- callbacks yield
           val response = postWebhook[WebhookCreatedInfo](StatusCodes.OK, Some(JsObject(
@@ -404,9 +419,9 @@ class WebhookSpec extends ApiSpec, ScalaFutures, Inspectors:
 
         // upload some content (overwrite)
         Post(
-          "/m/test/model/1/content?format=application/json&overwrite=1",
+          "/m/hook_ns/model/1/content?format=application/json&overwrite=1",
           ContentSpec.createEntity("/small.json", ContentTypes.`application/json`),
-        ) ~> contentRes.route ~> check {
+        ) ~> contentRoute ~> check {
           status should be (StatusCodes.OK)
         }
 
@@ -422,7 +437,7 @@ class WebhookSpec extends ApiSpec, ScalaFutures, Inspectors:
               payloadO.fields("timestamp").asInstanceOf[JsString].value.length should be (19)
 
               val context = payloadO.fields("context").asJsObject
-              context.fields("namespace") should be (JsString("test"))
+              context.fields("namespace") should be (JsString("hook_ns"))
               context.fields("model") should be (JsString("model"))
               context.fields("version") should be (JsString("1"))
 
@@ -431,13 +446,189 @@ class WebhookSpec extends ApiSpec, ScalaFutures, Inspectors:
               body.fields("contentType") should be (JsString("application/json"))
               body.fields("md5") should be (JsString(ContentSpec.smallJsonContentMD5))
               body.fields("format") should be (JsString("application/json"))
-              body.fields("overwrite") should be (JsBoolean(true))
+              body.fields("overwrite") should be (JsBoolean(false))
             }
         }
 
         forAll(receivedHooks) { (callback, payload) =>
           callback should not be "http://localhost/dontRun"
           payload.asInstanceOf[JsObject].fields("hookId") should not be notExpectedHookInfo.handle
+        }
+      }
+
+      "execute content_delete hooks" in {
+        receivedHooks.clear()
+
+        val expectedHooks = for (callback, context) <- callbacks yield
+          val response = postWebhook[WebhookCreatedInfo](StatusCodes.OK, Some(JsObject(
+            "action" -> JsString("content_delete"),
+            "callback" -> JsString(callback),
+            "context" -> context,
+          )))
+          (callback, response.handle)
+
+        val notExpectedHookInfo = postWebhook[WebhookCreatedInfo](StatusCodes.OK, Some(JsObject(
+          "action" -> JsString("content_delete"),
+          "callback" -> JsString("http://localhost/dontRun"),
+          "context" -> JsObject(
+            "namespace" -> JsString("other-ns")
+          ),
+        )))
+
+        // Delete content from the previous test
+        Delete(
+          "/m/hook_ns/model/1/content?format=application/json&force=1",
+        ) ~> contentRoute ~> check {
+          status should be (StatusCodes.OK)
+        }
+
+        eventually(timeout(10.seconds), interval(2.seconds)) {
+          receivedHooks.size should be >= 5
+          for (expectedCallback, expectedHandle) <- expectedHooks do
+            forExactly(1, receivedHooks) { (callback, payload) =>
+              callback should be (expectedCallback)
+              payload shouldBe a [JsObject]
+              val payloadO = payload.asInstanceOf[JsObject]
+              payloadO.fields("action") should be(JsString("content_delete"))
+              payloadO.fields("hookId") should be(JsString(expectedHandle))
+              payloadO.fields("timestamp").asInstanceOf[JsString].value.length should be(19)
+
+              val context = payloadO.fields("context").asJsObject
+              context.fields("namespace") should be(JsString("hook_ns"))
+              context.fields("model") should be(JsString("model"))
+              context.fields("version") should be(JsString("1"))
+
+              val body = payloadO.fields("body").asJsObject
+              body.fields("format") should be(JsString("application/json"))
+            }
+        }
+
+        forAll(receivedHooks) { (callback, payload) =>
+          callback should not be "http://localhost/dontRun"
+          payload.asInstanceOf[JsObject].fields("hookId") should not be notExpectedHookInfo.handle
+        }
+      }
+
+      "execute model_version_delete hooks" in {
+        receivedHooks.clear()
+
+        val expectedHooks = for (callback, context) <- callbacks yield
+          val response = postWebhook[WebhookCreatedInfo](StatusCodes.OK, Some(JsObject(
+            "action" -> JsString("model_version_delete"),
+            "callback" -> JsString(callback),
+            "context" -> context,
+          )))
+          (callback, response.handle)
+
+        // Delete model version from the previous test
+        Delete(
+          "/m/hook_ns/model/1?force=1",
+        ) ~> mvRoute ~> check {
+          status should be(StatusCodes.OK)
+        }
+
+        eventually(timeout(10.seconds), interval(2.seconds)) {
+          receivedHooks.size should be >= 5
+          for (expectedCallback, expectedHandle) <- expectedHooks do
+            forExactly(1, receivedHooks) { (callback, payload) =>
+              callback should be(expectedCallback)
+              payload shouldBe a[JsObject]
+              val payloadO = payload.asInstanceOf[JsObject]
+              payloadO.fields("action") should be(JsString("model_version_delete"))
+              payloadO.fields("hookId") should be(JsString(expectedHandle))
+              payloadO.fields("timestamp").asInstanceOf[JsString].value.length should be(19)
+
+              val context = payloadO.fields("context").asJsObject
+              context.fields("namespace") should be(JsString("hook_ns"))
+              context.fields("model") should be(JsString("model"))
+              context.fields("version") should be(JsString("1"))
+
+              val body = payloadO.fields("body").asJsObject
+              body.fields.size should be (0)
+            }
+        }
+      }
+
+      "execute model_delete hooks" in {
+        receivedHooks.clear()
+
+        val expectedHooks = for (callback, context) <- callbacks
+          .filterNot(_._2.fields.keys.exists(_ == "version"))
+        yield
+          val response = postWebhook[WebhookCreatedInfo](StatusCodes.OK, Some(JsObject(
+            "action" -> JsString("model_delete"),
+            "callback" -> JsString(callback),
+            "context" -> context,
+          )))
+          (callback, response.handle)
+
+        // Delete model from the previous test
+        Delete(
+          "/m/hook_ns/model?force=1",
+        ) ~> modelRoute ~> check {
+          status should be(StatusCodes.OK)
+        }
+
+        eventually(timeout(10.seconds), interval(2.seconds)) {
+          receivedHooks.size should be >= 4
+          for (expectedCallback, expectedHandle) <- expectedHooks do
+            forExactly(1, receivedHooks) { (callback, payload) =>
+              callback should be(expectedCallback)
+              payload shouldBe a[JsObject]
+              val payloadO = payload.asInstanceOf[JsObject]
+              payloadO.fields("action") should be(JsString("model_delete"))
+              payloadO.fields("hookId") should be(JsString(expectedHandle))
+              payloadO.fields("timestamp").asInstanceOf[JsString].value.length should be(19)
+
+              val context = payloadO.fields("context").asJsObject
+              context.fields("namespace") should be(JsString("hook_ns"))
+              context.fields("model") should be(JsString("model"))
+              context.fields.size should be (2)
+
+              val body = payloadO.fields("body").asJsObject
+              body.fields.size should be(0)
+            }
+        }
+      }
+
+      "execute namespace_delete hooks" in {
+        receivedHooks.clear()
+
+        val expectedHooks = for (callback, context) <- callbacks
+          .filterNot(_._2.fields.keys.exists(_ == "model"))
+        yield
+          val response = postWebhook[WebhookCreatedInfo](StatusCodes.OK, Some(JsObject(
+            "action" -> JsString("namespace_delete"),
+            "callback" -> JsString(callback),
+            "context" -> context,
+          )))
+          (callback, response.handle)
+
+        // Delete namespace from the previous test
+        Delete(
+          "/m/hook_ns?force=1",
+        ) ~> nsRoute ~> check {
+          status should be(StatusCodes.OK)
+        }
+
+        eventually(timeout(10.seconds), interval(2.seconds)) {
+          receivedHooks.size should be >= 3
+          for (expectedCallback, expectedHandle) <- expectedHooks do
+            forExactly(1, receivedHooks) { (callback, payload) =>
+              callback should be(expectedCallback)
+              payload shouldBe a[JsObject]
+              val payloadO = payload.asInstanceOf[JsObject]
+              payloadO.fields("action") should be(JsString("namespace_delete"))
+              payloadO.fields("hookId") should be(JsString(expectedHandle))
+              payloadO.fields("timestamp").asInstanceOf[JsString].value.length should be(19)
+
+              val context = payloadO.fields("context").asJsObject
+              context.fields("namespace") should be(JsString("hook_ns"))
+              context.fields.size should be(1)
+
+              val body = payloadO.fields("body").asJsObject
+              body.fields.size should be(0)
+            }
         }
       }
     }

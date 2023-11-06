@@ -35,6 +35,7 @@ class ContentSpec extends ApiSpec, ScalaFutures, Inspectors:
   import ContentSpec.*
 
   val contentRoute = ContentResource(controllers.webhook).route
+  val mvRoute = Route.seal(ModelVersionResource(controllers.webhook).route)
 
   "content endpoint" should {
     // Uploading
@@ -231,7 +232,7 @@ class ContentSpec extends ApiSpec, ScalaFutures, Inspectors:
     "set default format to an non-existent format of a model" in {
       Patch("/m/test/model2/1.0.0",
         HttpEntity(ContentTypes.`application/json`, "{\"defaultFormat\": \"doesnotexist\"}")
-      ) ~> ModelVersionResource.route ~> check {
+      ) ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
@@ -239,7 +240,7 @@ class ContentSpec extends ApiSpec, ScalaFutures, Inspectors:
     "set default format to a different, exisitng format of a model" in {
       Patch("/m/test2/model/1.0.0",
         HttpEntity(ContentTypes.`application/json`, "{\"defaultFormat\": \"xml\"}")
-      ) ~> ModelVersionResource.route ~> check {
+      ) ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
@@ -247,13 +248,13 @@ class ContentSpec extends ApiSpec, ScalaFutures, Inspectors:
     "unset the default format" in {
       Patch("/m/test/model/1",
         HttpEntity(ContentTypes.`application/json`, "{\"defaultFormat\": \"@unset\"}")
-      ) ~> ModelVersionResource.route ~> check {
+      ) ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
 
     "list model version's formats" in {
-      Get("/m/test/model/1.0.0") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model/1.0.0") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         val response = responseAs[ModelVersionClientModel]
         response.defaultFormat.value should be ("application/json")
@@ -491,7 +492,7 @@ class ContentSpec extends ApiSpec, ScalaFutures, Inspectors:
 
   "model version endpoint" should {
     "should not list deleted formats" in {
-      Get("/m/test/model/1.0.0") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model/1.0.0") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         val response = responseAs[ModelVersionClientModel]
         val formats: Map[String, StoredFileClientModel] = response.formats.value

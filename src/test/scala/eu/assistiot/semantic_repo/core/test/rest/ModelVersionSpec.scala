@@ -30,6 +30,9 @@ import scala.reflect.ClassTag
  */
 @DoNotDiscover
 class ModelVersionSpec extends ApiSpec:
+  val modelRoute = Route.seal(ModelResource(controllers.webhook).route)
+  val mvRoute = Route.seal(ModelVersionResource(controllers.webhook).route)
+  
   def modifyVersion[T: FromResponseUnmarshaller: ClassTag]
   (method: RequestBuilder, name: String, statusCode: StatusCode, payload: Option[String] = None): T =
     val request = payload match
@@ -38,7 +41,7 @@ class ModelVersionSpec extends ApiSpec:
         s"/m/$name",
         HttpEntity(ContentTypes.`application/json`, p.replace('\'', '"'))
       )
-    request ~> Route.seal(ModelVersionResource.route) ~> check {
+    request ~> mvRoute ~> check {
       status should be (statusCode)
       contentType should be (ContentTypes.`application/json`)
       responseAs[T] shouldBe a [T]
@@ -102,7 +105,7 @@ class ModelVersionSpec extends ApiSpec:
       modifyVersion[SuccessResponse](Post, "test/model/" + "0123456789".repeat(10), StatusCodes.OK)
     }
     "not create a model version with reserved version tag (latest)" in {
-      Post("/m/test/model/latest") ~> ModelVersionResource.route ~> check {
+      Post("/m/test/model/latest") ~> mvRoute ~> check {
         status should be (StatusCodes.BadRequest)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ErrorResponse]
@@ -111,7 +114,7 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "not create a model version in a non-existent model" in {
-      Post("/m/test/doesnotexist/1.0") ~> ModelVersionResource.route ~> check {
+      Post("/m/test/doesnotexist/1.0") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
         contentType should be (ContentTypes.`application/json`)
         responseAs[ErrorResponse] shouldBe an [ErrorResponse]
@@ -123,19 +126,19 @@ class ModelVersionSpec extends ApiSpec:
     "set latest tag to an existing version of a model" in {
       Patch("/m/test/model",
         HttpEntity(ContentTypes.`application/json`, "{\"latestVersion\": \"1.1.0\"}")
-      ) ~> ModelResource.route ~> check {
+      ) ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
     "set latest tag to a non-existent version of a model" in {
       Patch("/m/test/model2",
         HttpEntity(ContentTypes.`application/json`, "{\"latestVersion\": \"2.0.0\"}")
-      ) ~> ModelResource.route ~> check {
+      ) ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
     "list versions of a model" in {
-      Get("/m/test/model") ~> ModelResource.route ~> check {
+      Get("/m/test/model") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ModelClientModel]
@@ -155,7 +158,7 @@ class ModelVersionSpec extends ApiSpec:
   "model version endpoint" should {
     // Retrieving one version
     "retrieve one model version" in {
-      Get("/m/test/model/1.0.0") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model/1.0.0") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ModelVersionClientModel]
@@ -168,7 +171,7 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "retrieve model version with default format set on POST" in {
-      Get("/m/test/model/full") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model/full") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ModelVersionClientModel]
@@ -177,7 +180,7 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "retrieve model version with trailing slash" in {
-      Get("/m/test2/model/1.0.0") ~> ModelVersionResource.route ~> check {
+      Get("/m/test2/model/1.0.0") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ModelVersionClientModel]
@@ -190,17 +193,17 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "not retrieve a non-existent model version" in {
-      Get("/m/test/model/doesnotexist") ~> Route.seal(ModelVersionResource.route) ~> check {
+      Get("/m/test/model/doesnotexist") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "not retrieve a model version in invalid namespace" in {
-      Get("/t/model/1.0") ~> Route.seal(ModelVersionResource.route) ~> check {
+      Get("/t/model/1.0") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "retrieve a valid 'latest' version" in {
-      Get("/m/test/model/latest") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model/latest") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         val response = responseAs[ModelVersionClientModel]
         response.version should be ("1.1.0")
@@ -211,13 +214,13 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "retrieve a valid 'latest' version with trailing slash" in {
-      Get("/m/test/model/latest/") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model/latest/") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         responseAs[ModelVersionClientModel] shouldBe a [ModelVersionClientModel]
       }
     }
     "not retrieve a broken 'latest' pointer" in {
-      Get("/m/test/model2/latest") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model2/latest") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
         val response = responseAs[ErrorResponse]
         response.error should include ("test/model2/2.0.0")
@@ -225,7 +228,7 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "not retrieve an unset 'latest' pointer" in {
-      Get("/m/test2/model/latest") ~> ModelVersionResource.route ~> check {
+      Get("/m/test2/model/latest") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
         val response = responseAs[ErrorResponse]
         response.error should include ("'latestVersion' pointer is not set")
@@ -233,7 +236,7 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "not retrieve the 'latest' pointer on a non-existent model" in {
-      Get("/m/test/doesnotexist/latest") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/doesnotexist/latest") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
         val response = responseAs[ErrorResponse]
         response.error should include ("test/doesnotexist")
@@ -245,7 +248,7 @@ class ModelVersionSpec extends ApiSpec:
       modifyVersion[SuccessResponse](Patch, "test/model/empty", StatusCodes.OK, Some("{'defaultFormat': 'csv'}"))
     }
     "retrieve model version with field set in PATCH" in {
-      Get("/m/test/model/empty") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model/empty") ~> mvRoute ~> check {
         val response = responseAs[ModelVersionClientModel]
         response.defaultFormat.value should be ("csv")
       }
@@ -254,7 +257,7 @@ class ModelVersionSpec extends ApiSpec:
       modifyVersion[SuccessResponse](Patch, "test/model/full", StatusCodes.OK, Some("{'defaultFormat': '@unset'}"))
     }
     "retrieve model version with field unset in PATCH" in {
-      Get("/m/test/model/full") ~> ModelVersionResource.route ~> check {
+      Get("/m/test/model/full") ~> mvRoute ~> check {
         val response = responseAs[ModelVersionClientModel]
         response.defaultFormat should be (None)
       }
@@ -280,7 +283,7 @@ class ModelVersionSpec extends ApiSpec:
 
     // Deleting model versions
     "not delete a version without the 'force' parameter" in {
-      Delete("/m/test/model/a") ~> ModelVersionResource.route ~> check {
+      Delete("/m/test/model/a") ~> mvRoute ~> check {
         status should be (StatusCodes.BadRequest)
         val response = responseAs[ErrorResponse]
         response.error should include ("To really perform this action")
@@ -288,7 +291,7 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "not delete a version with the 'force' parameter not set to 1" in {
-      Delete("/m/test/model/a?force=true") ~> ModelVersionResource.route ~> check {
+      Delete("/m/test/model/a?force=true") ~> mvRoute ~> check {
         status should be (StatusCodes.BadRequest)
         val response = responseAs[ErrorResponse]
         response.error should include ("To really perform this action")
@@ -296,41 +299,41 @@ class ModelVersionSpec extends ApiSpec:
       }
     }
     "delete a version" in {
-      Delete("/m/test/model/a?force=1") ~> ModelVersionResource.route ~> check {
+      Delete("/m/test/model/a?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         responseAs[SuccessResponse] shouldBe a [SuccessResponse]
       }
     }
     "delete a version with trailing slash" in {
-      Delete("/m/test/model/" + "0123456789".repeat(10) + "/?force=1") ~> ModelVersionResource.route ~> check {
+      Delete("/m/test/model/" + "0123456789".repeat(10) + "/?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         responseAs[SuccessResponse] shouldBe a [SuccessResponse]
       }
     }
     "not delete a non-existent version" in {
-      Delete("/m/test/model/doesnotexist?force=1") ~> Route.seal(ModelVersionResource.route) ~> check {
+      Delete("/m/test/model/doesnotexist?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "not delete a version of a model in non-existent namespace" in {
-      Delete("/doesnotexist/model/1.0.0?force=1") ~> Route.seal(ModelVersionResource.route) ~> check {
+      Delete("/doesnotexist/model/1.0.0?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "not delete a version of a non-existent model" in {
-      Delete("/m/test/doesnotexist/1.0.0?force=1") ~> Route.seal(ModelVersionResource.route) ~> check {
+      Delete("/m/test/doesnotexist/1.0.0?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "not retrieve a deleted version" in {
-      Get("/m/test/model/a?force=1") ~> Route.seal(ModelVersionResource.route) ~> check {
+      Get("/m/test/model/a?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "not delete the 'latest' tag" in {
-      Delete("/m/test/model/latest?force=1") ~> ModelVersionResource.route ~> check {
+      Delete("/m/test/model/latest?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.BadRequest)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ErrorResponse]

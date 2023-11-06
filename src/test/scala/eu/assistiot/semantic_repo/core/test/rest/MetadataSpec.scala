@@ -17,13 +17,29 @@ import scala.reflect.ClassTag
 
 @DoNotDiscover
 class MetadataSpec extends ApiSpec, ScalaFutures, Inspectors, EitherValues:
+  val nsRes = NamespaceResource(controllers.webhook)
+  val modelRes = ModelResource(controllers.webhook)
+  val mvRes = ModelVersionResource(controllers.webhook)
+
   val endpoints = Seq(
-    Endpoint[NamespaceClientModel, RootInfoClientModel]
-      ("namespace", "/m/", NamespaceResource, NamespaceResource),
-    Endpoint[ModelClientModel, NamespaceClientModel]
-      ("model", "/m/metadata/", ModelResource, NamespaceResource),
-    Endpoint[ModelVersionClientModel, ModelClientModel]
-      ("model version", "/m/metadata/metadata/", ModelVersionResource, ModelResource),
+    Endpoint[NamespaceClientModel, RootInfoClientModel](
+      "namespace",
+      "/m/",
+      nsRes,
+      nsRes
+    ),
+    Endpoint[ModelClientModel, NamespaceClientModel](
+      "model",
+      "/m/metadata/",
+      modelRes,
+      nsRes
+    ),
+    Endpoint[ModelVersionClientModel, ModelClientModel](
+      "model version",
+      "/m/metadata/metadata/",
+      mvRes,
+      modelRes
+    ),
   )
 
   def modifyEntity[T : FromResponseUnmarshaller : ClassTag]
@@ -45,11 +61,11 @@ class MetadataSpec extends ApiSpec, ScalaFutures, Inspectors, EitherValues:
   // Set up parent entities first
   "namespace & model endpoints" should {
     "create a test namespace" in {
-      implicit val resource: Resource = NamespaceResource
+      implicit val resource: Resource = nsRes
       modifyEntity[SuccessResponse](Post, "/m/metadata", StatusCodes.OK, Some("{}"))
     }
     "create a test model" in {
-      implicit val resource: Resource = ModelResource
+      implicit val resource: Resource = modelRes
       modifyEntity[SuccessResponse](Post, "/m/metadata/metadata", StatusCodes.OK, Some("{}"))
     }
   }

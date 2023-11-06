@@ -52,11 +52,11 @@ trait RestApi extends ActorSystemUser, JsonSupport, LazyLogging:
           // Docs for models (/v1/m/*/*/*/doc and /v1/m/*/*/*/doc_gen)
           new DocModelResource(system).route,
           // Model versions (/v1/m/*/*/*)
-          ModelVersionResource.route,
+          new ModelVersionResource(controllers.webhook).route,
           // Models (/v1/m/*/*)
-          ModelResource.route,
+          new ModelResource(controllers.webhook).route,
           // Namespaces (/v1/m/*)
-          NamespaceResource.route,
+          new NamespaceResource(controllers.webhook).route,
         )
       } ~
       // /version, /info, /health

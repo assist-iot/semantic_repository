@@ -25,22 +25,26 @@ class PagingSpec extends ApiSpec, ScalaFutures, Inspectors, EitherValues:
     val nameProperty: String
     def getSetFromResponse: SetClientModel[TEnt] = responseAs[TParent].getSet.value
 
+  val nsRes = NamespaceResource(controllers.webhook)
+  val modelRes = ModelResource(controllers.webhook)
+  val mvRes = ModelVersionResource(controllers.webhook)
+
   object NamespaceEndpoint extends Endpoint[NamespaceClientModel, RootInfoClientModel]:
     val pathPrefix = "/m/"
-    val getResource = NamespaceResource
-    val postResource = NamespaceResource
+    val getResource = nsRes
+    val postResource = nsRes
     val nameProperty = "namespace"
 
   object ModelEndpoint extends Endpoint[ModelClientModel, NamespaceClientModel]:
     val pathPrefix = "/m/paging/"
-    val getResource = NamespaceResource
-    val postResource = ModelResource
+    val getResource = nsRes
+    val postResource = modelRes
     val nameProperty = "model"
 
   object ModelVersionEndpoint extends Endpoint[ModelVersionClientModel, ModelClientModel]:
     val pathPrefix = "/m/paging/paging/"
-    val getResource = ModelResource
-    val postResource = ModelVersionResource
+    val getResource = modelRes
+    val postResource = mvRes
     val nameProperty = "version"
 
   val endpoints = Map(
@@ -60,12 +64,12 @@ class PagingSpec extends ApiSpec, ScalaFutures, Inspectors, EitherValues:
   // Set up parent entities first
   "namespace & model endpoints" should {
     "create a test namespace" in {
-      Post("/m/paging", postPayload(0)) ~> NamespaceResource.route ~> check {
+      Post("/m/paging", postPayload(0)) ~> nsRes.route ~> check {
         status should be (StatusCodes.OK)
       }
     }
     "create a test model" in {
-      Post("/m/paging/paging", postPayload(0)) ~> ModelResource.route ~> check {
+      Post("/m/paging/paging", postPayload(0)) ~> modelRes.route ~> check {
         status should be (StatusCodes.OK)
       }
     }

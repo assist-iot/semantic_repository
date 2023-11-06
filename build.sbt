@@ -5,7 +5,7 @@ lazy val slf4jV = "1.7.36"
 
 lazy val commonSettings = Seq(
   name := "semantic-repo",
-  version := "1.0.0",
+  version := "1.1.0",
   scalaVersion := "3.1.3",
 
   // Packages available only with Scala 2.13

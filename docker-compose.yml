@@ -25,7 +25,7 @@ services:
       - '127.0.0.1:27017:27017'
     environment:
       # If you want to connect to the DB from localhost, you may need to uncomment this line:
-      # MONGODB_ADVERTISED_HOSTNAME: localhost
+      MONGODB_ADVERTISED_HOSTNAME: localhost
       MONGODB_REPLICA_SET_MODE: primary
       MONGODB_ROOT_PASSWORD: akka
       MONGODB_REPLICA_SET_KEY: replicasetkey

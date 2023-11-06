@@ -1,11 +1,12 @@
 package eu.assistiot.semantic_repo.core.rest.resources
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport.*
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{DateTime, StatusCodes}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.*
 import com.mongodb.client.result.DeleteResult
 import eu.assistiot.semantic_repo.core.Exceptions.*
+import eu.assistiot.semantic_repo.core.controller.WebhookController
 import eu.assistiot.semantic_repo.core.datamodel.*
 import eu.assistiot.semantic_repo.core.rest.*
 import eu.assistiot.semantic_repo.core.rest.Directives.*
@@ -17,14 +18,18 @@ import org.mongodb.scala.model.Filters as f
 import org.mongodb.scala.model.Projections as p
 import org.mongodb.scala.result.UpdateResult
 import spray.json.DefaultJsonProtocol.*
+import spray.json.JsObject
 
 import scala.util.{Failure, Success, Try}
 import scala.util.matching.*
 
-object ModelResource extends MongoResource:
+object ModelResource:
   // Regex for matching valid model names
   final val modRegexString = NamespaceResource.nsRegexString
   val modRegex = modRegexString.r
+
+class ModelResource(webhookContr: WebhookController) extends MongoResource:
+  import ModelResource.*
 
   private val innerRoute =
     ignoreTrailingSlash {
@@ -147,7 +152,14 @@ object ModelResource extends MongoResource:
         }, None ).toFuture
 
         onComplete(transactionFuture) {
-          case Success(_) => complete(StatusCodes.OK, SuccessResponse(s"Deleted model '$modelPath'."))
+          case Success(_) =>
+            webhookContr.dispatchWebhook(
+              MongoModel.WebhookAction.ModelDelete,
+              mc,
+              DateTime.now,
+              JsObject()
+            )
+            complete(StatusCodes.OK, SuccessResponse(s"Deleted model '$modelPath'."))
           case Failure(NonEmptyEntityException(what)) =>
             complete(StatusCodes.BadRequest,
               ErrorResponse(s"Model '$modelPath' is not empty. Please delete the $what first."))

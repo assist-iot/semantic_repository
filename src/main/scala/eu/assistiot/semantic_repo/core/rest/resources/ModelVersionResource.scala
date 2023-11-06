@@ -1,11 +1,12 @@
 package eu.assistiot.semantic_repo.core.rest.resources
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport.*
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{DateTime, StatusCodes}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.{Rejection, RejectionHandler, Route}
 import com.mongodb.client.result.DeleteResult
 import eu.assistiot.semantic_repo.core.Exceptions.*
+import eu.assistiot.semantic_repo.core.controller.WebhookController
 import eu.assistiot.semantic_repo.core.datamodel.{ErrorResponse, MongoModel, SuccessResponse}
 import eu.assistiot.semantic_repo.core.datamodel.*
 import eu.assistiot.semantic_repo.core.rest.*
@@ -16,11 +17,12 @@ import fr.davit.akka.http.metrics.core.scaladsl.server.HttpMetricsDirectives.*
 import org.mongodb.scala.*
 import org.mongodb.scala.model.Filters as f
 import spray.json.DefaultJsonProtocol.*
+import spray.json.JsObject
 
 import scala.util.{Failure, Success, Try}
 import scala.util.matching.*
 
-object ModelVersionResource extends MongoResource:
+object ModelVersionResource:
   // Regex for matching valid version tags
   final val verRegexString = "^[a-zA-Z0-9][\\w-+.]{0,99}$"
   val verRegex = verRegexString.r
@@ -29,6 +31,9 @@ object ModelVersionResource extends MongoResource:
    * Shorthand for matching paths that contain m/{ns}/{model}/{version}.
    */
   val mvMatcher = "m" / NamespaceResource.nsRegex / ModelResource.modRegex / verRegex
+
+class ModelVersionResource(webhookContr: WebhookController) extends MongoResource:
+  import ModelVersionResource.*
 
   private val innerRoute =
     ignoreTrailingSlash {
@@ -148,8 +153,16 @@ object ModelVersionResource extends MongoResource:
             }, None ).toFuture
 
             onComplete(transactionFuture) {
-              case Success(_) => complete(StatusCodes.OK, SuccessResponse(
-                s"Deleted model version '$modelVersionPath'."))
+              case Success(_) =>
+                webhookContr.dispatchWebhook(
+                  MongoModel.WebhookAction.ModelVersionDelete,
+                  mvc,
+                  DateTime.now,
+                  JsObject()
+                )
+                complete(
+                  StatusCodes.OK, SuccessResponse(s"Deleted model version '$modelVersionPath'.")
+                )
               case Failure(NonEmptyEntityException(what)) =>
                 complete(StatusCodes.BadRequest, ErrorResponse(
                   s"Model version '$modelVersionPath' is not empty. Please delete the $what first."))

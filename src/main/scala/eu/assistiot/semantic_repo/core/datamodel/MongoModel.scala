@@ -408,3 +408,7 @@ object MongoModel extends MongoTransactions:
    */
   enum WebhookAction(val key: String):
     case ContentUpload extends WebhookAction("content_upload")
+    case ContentDelete extends WebhookAction("content_delete")
+    case ModelDelete extends WebhookAction("model_delete")
+    case ModelVersionDelete extends WebhookAction("model_version_delete")
+    case NamespaceDelete extends WebhookAction("namespace_delete")

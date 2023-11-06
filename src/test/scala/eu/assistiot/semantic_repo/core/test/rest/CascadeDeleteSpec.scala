@@ -25,6 +25,9 @@ import scala.concurrent.duration.*
 class CascadeDeleteSpec extends ApiSpec:
   val docRoute = Route.seal(DocModelResource(systemInternal).route)
   val contentRoute = Route.seal(ContentResource(controllers.webhook).route)
+  val nsRoute = Route.seal(NamespaceResource(controllers.webhook).route)
+  val modelRoute = Route.seal(ModelResource(controllers.webhook).route)
+  val mvRoute = Route.seal(ModelVersionResource(controllers.webhook).route)
 
   def getContentEntity =
     val file = new File(getClass.getResource("/small.json").toURI)
@@ -37,32 +40,32 @@ class CascadeDeleteSpec extends ApiSpec:
   // Prepare namespaces & models for testing
   "REST endpoints" should {
     "create namespaces" in {
-      Post("/m/ns_del_1") ~> NamespaceResource.route ~> check {
+      Post("/m/ns_del_1") ~> nsRoute ~> check {
         status should be (StatusCodes.OK)
       }
-      Post("/m/ns_del_2") ~> NamespaceResource.route ~> check {
+      Post("/m/ns_del_2") ~> nsRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
     "create models" in {
-      Post("/m/ns_del_1/m_1") ~> ModelResource.route ~> check {
+      Post("/m/ns_del_1/m_1") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
       }
-      Post("/m/ns_del_1/m_2") ~> ModelResource.route ~> check {
+      Post("/m/ns_del_1/m_2") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
       }
-      Post("/m/ns_del_2/m_1") ~> ModelResource.route ~> check {
+      Post("/m/ns_del_2/m_1") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
     "create model versions" in {
-      Post("/m/ns_del_1/m_1/1.0") ~> ModelVersionResource.route ~> check {
+      Post("/m/ns_del_1/m_1/1.0") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
       }
-      Post("/m/ns_del_1/m_1/1.1") ~> ModelVersionResource.route ~> check {
+      Post("/m/ns_del_1/m_1/1.1") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
       }
-      Post("/m/ns_del_2/m_1/1.0") ~> ModelVersionResource.route ~> check {
+      Post("/m/ns_del_2/m_1/1.0") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
@@ -89,7 +92,7 @@ class CascadeDeleteSpec extends ApiSpec:
   // Not delete non-empty entities
   "namespace endpoint" should {
     "not delete non-empty namespace" in {
-      Delete("/m/ns_del_2?force=1") ~> NamespaceResource.route ~> check {
+      Delete("/m/ns_del_2?force=1") ~> nsRoute ~> check {
         status should be (StatusCodes.BadRequest)
         contentType should be (ContentTypes.`application/json`)
         val e: ErrorResponse = responseAs[ErrorResponse]
@@ -101,7 +104,7 @@ class CascadeDeleteSpec extends ApiSpec:
 
   "model endpoint" should {
     "not delete non-empty model" in {
-      Delete("/m/ns_del_2/m_1?force=1") ~> ModelResource.route ~> check {
+      Delete("/m/ns_del_2/m_1?force=1") ~> modelRoute ~> check {
         status should be (StatusCodes.BadRequest)
         contentType should be (ContentTypes.`application/json`)
         val e: ErrorResponse = responseAs[ErrorResponse]
@@ -113,7 +116,7 @@ class CascadeDeleteSpec extends ApiSpec:
 
   "model version endpoint" should {
     "not delete non-empty model version (content)" in {
-      Delete("/m/ns_del_2/m_1/1.0?force=1") ~> ModelVersionResource.route ~> check {
+      Delete("/m/ns_del_2/m_1/1.0?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.BadRequest)
         contentType should be (ContentTypes.`application/json`)
         val e: ErrorResponse = responseAs[ErrorResponse]
@@ -134,7 +137,7 @@ class CascadeDeleteSpec extends ApiSpec:
 
   "model version endpoint" should {
     "not delete non-empty model version (documentation)" in {
-      Delete("/m/ns_del_2/m_1/1.0?force=1") ~> ModelVersionResource.route ~> check {
+      Delete("/m/ns_del_2/m_1/1.0?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.BadRequest)
         contentType should be (ContentTypes.`application/json`)
         val e: ErrorResponse = responseAs[ErrorResponse]
@@ -157,7 +160,7 @@ class CascadeDeleteSpec extends ApiSpec:
 
   "model version endpoint" should {
     "delete model version" in {
-      Delete("/m/ns_del_2/m_1/1.0?force=1") ~> ModelVersionResource.route ~> check {
+      Delete("/m/ns_del_2/m_1/1.0?force=1") ~> mvRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
@@ -166,7 +169,7 @@ class CascadeDeleteSpec extends ApiSpec:
   // Now it should be possible to delete the parents
   "model endpoint" should {
     "delete emptied model" in {
-      Delete("/m/ns_del_2/m_1?force=1") ~> ModelResource.route ~> check {
+      Delete("/m/ns_del_2/m_1?force=1") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }
@@ -174,7 +177,7 @@ class CascadeDeleteSpec extends ApiSpec:
 
   "namespace endpoint" should {
     "delete emptied namespace" in {
-      Delete("/m/ns_del_2?force=1") ~> NamespaceResource.route ~> check {
+      Delete("/m/ns_del_2?force=1") ~> nsRoute ~> check {
         status should be (StatusCodes.OK)
       }
     }

@@ -300,8 +300,17 @@ class ContentResource(webhookContr: WebhookController) extends MongoResource:
             val deleteFuture = S3.deleteObject(Bucket.DataModel.name, s"$modelVersionPath/$format")
               .runWith(Sink.head)
             onComplete(deleteFuture) {
-              case Success(_) => complete(StatusCodes.OK, SuccessResponse(s"Deleted file with format '$format' " +
-                s"in model version '$modelVersionPath'."))
+              case Success(_) =>
+                webhookContr.dispatchWebhook(
+                  MongoModel.WebhookAction.ContentDelete,
+                  mvContext,
+                  DateTime.now,
+                  JsObject(
+                    "format" -> JsString(format),
+                  )
+                )
+                complete(StatusCodes.OK, SuccessResponse(s"Deleted file with format '$format' " +
+                  s"in model version '$modelVersionPath'."))
               // We managed to delete the entry in the DB, but not the actual file for some reason...
               // That is still fine, we may be simply cleaning up some inconsistencies. Return a success response.
               case _ => complete(StatusCodes.OK, SuccessResponse(s"Deleted metadata entry for file with format " +

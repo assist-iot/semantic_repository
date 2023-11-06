@@ -55,6 +55,7 @@ trait ObjectPathContext:
  */
 trait AbstractNamespaceContext extends ObjectPathContext:
   def ns: String
+  final def namespacePath = ns
   override def getNamespace = Some(ns)
   override def namespaceFilter = f.eq("name", ns)
   override def modelFilter = f.eq("namespaceName", ns)
@@ -65,6 +66,7 @@ trait AbstractNamespaceContext extends ObjectPathContext:
  */
 trait AbstractModelContext extends AbstractNamespaceContext:
   def model: String
+  final def modelPath = s"$ns/$model"
   override def getModel = Some(model)
   override def modelFilter =
     f.and(f.eq("namespaceName", ns), f.eq("name", model))
@@ -76,6 +78,7 @@ trait AbstractModelContext extends AbstractNamespaceContext:
  */
 trait AbstractModelVersionContext extends AbstractModelContext:
   def version: String
+  final def modelVersionPath = s"$ns/$model/$version"
   override def getModelVersion = Some(version)
   override def modelVersionFilter = f.and(
     f.eq("namespaceName", ns),
@@ -90,13 +93,13 @@ case object RootContext extends ObjectPathContext:
   override def path = ""
 
 case class NamespaceContext(ns: String) extends AbstractNamespaceContext:
-  override def path = ns
+  override def path = namespacePath
 
 case class ModelContext(ns: String, model: String) extends AbstractModelContext:
-  override def path = s"$ns/$model"
+  override def path = modelPath
 
 case class ModelVersionContext(ns: String, model: String, version: String) extends AbstractModelVersionContext:
-  override def path = s"$ns/$model/$version"
+  override def path = modelVersionPath
 
 /**
  * Generates a MongoDB filter for finding the relevant namespace.
@@ -124,18 +127,18 @@ def modelVersionFilter(implicit opc: ObjectPathContext): Bson = opc.modelVersion
  * @param nc namespace context
  * @return human-readable path
  */
-def namespacePath(implicit nc: AbstractNamespaceContext): String = nc.path
+def namespacePath(implicit nc: AbstractNamespaceContext): String = nc.namespacePath
 
 /**
  * Produces a string describing the path to access the current model.
  * @param mc model context
  * @return human-readable path
  */
-def modelPath(implicit mc: AbstractModelContext): String = mc.path
+def modelPath(implicit mc: AbstractModelContext): String = mc.modelPath
 
 /**
  * Produces a string describing the path to access the current model version.
  * @param mvc model version context
  * @return human-readable path
  */
-def modelVersionPath(implicit mvc: AbstractModelVersionContext): String = mvc.path
+def modelVersionPath(implicit mvc: AbstractModelVersionContext): String = mvc.modelVersionPath

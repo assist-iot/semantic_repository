@@ -23,6 +23,9 @@ import scala.reflect.ClassTag
  */
 @DoNotDiscover
 class ModelSpec extends ApiSpec:
+  val nsRoute = Route.seal(NamespaceResource(controllers.webhook).route)
+  val modelRoute = Route.seal(ModelResource(controllers.webhook).route)
+  
   def modifyModel[T: FromResponseUnmarshaller: ClassTag]
   (method: RequestBuilder, name: String, statusCode: StatusCode, payload: Option[String] = None): T =
     val request = payload match
@@ -31,7 +34,7 @@ class ModelSpec extends ApiSpec:
         s"/m/$name",
         HttpEntity(ContentTypes.`application/json`, p.replace('\'', '"'))
       )
-    request ~> Route.seal(ModelResource.route) ~> check {
+    request ~> modelRoute ~> check {
       status should be (statusCode)
       contentType should be (ContentTypes.`application/json`)
       responseAs[T] shouldBe a [T]
@@ -102,7 +105,7 @@ class ModelSpec extends ApiSpec:
 
   "namespace endpoint" should {
     "list models in namespace" in {
-      Get("/m/test") ~> NamespaceResource.route ~> check {
+      Get("/m/test") ~> nsRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[NamespaceClientModel]
@@ -120,7 +123,7 @@ class ModelSpec extends ApiSpec:
   "model endpoint" should {
     // Retrieving one model
     "retrieve one model" in {
-      Get("/m/test/model") ~> ModelResource.route ~> check {
+      Get("/m/test/model") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ModelClientModel]
@@ -133,7 +136,7 @@ class ModelSpec extends ApiSpec:
       }
     }
     "retrieve model with latest version set on POST" in {
-      Get("/m/test/model_json_full") ~> ModelResource.route ~> check {
+      Get("/m/test/model_json_full") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ModelClientModel]
@@ -142,7 +145,7 @@ class ModelSpec extends ApiSpec:
       }
     }
     "retrieve one model with trailing slash" in {
-      Get("/m/test/model2/") ~> ModelResource.route ~> check {
+      Get("/m/test/model2/") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         val response = responseAs[ModelClientModel]
@@ -150,12 +153,12 @@ class ModelSpec extends ApiSpec:
       }
     }
     "not retrieve a non-existent model" in {
-      Get("/m/test/doesnotexist") ~> Route.seal(ModelResource.route) ~> check {
+      Get("/m/test/doesnotexist") ~> modelRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "not retrieve a model in invalid namespace" in {
-      Get("/t/model") ~> Route.seal(ModelResource.route) ~> check {
+      Get("/t/model") ~> modelRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
@@ -165,7 +168,7 @@ class ModelSpec extends ApiSpec:
       modifyModel[SuccessResponse](Patch, "test/model_json_empty", StatusCodes.OK, Some("{'latestVersion': '2.0'}"))
     }
     "retrieve model with field set in PATCH" in {
-      Get("/m/test/model_json_empty") ~> ModelResource.route ~> check {
+      Get("/m/test/model_json_empty") ~> modelRoute ~> check {
         val response = responseAs[ModelClientModel]
         response.latestVersion.value should be ("2.0")
       }
@@ -174,7 +177,7 @@ class ModelSpec extends ApiSpec:
       modifyModel[SuccessResponse](Patch, "test/model_json_full", StatusCodes.OK, Some("{'latestVersion': '@unset'}"))
     }
     "retrieve model with field unset in PATCH" in {
-      Get("/m/test/model_json_full") ~> ModelResource.route ~> check {
+      Get("/m/test/model_json_full") ~> modelRoute ~> check {
         val response = responseAs[ModelClientModel]
         response.latestVersion should be (None)
       }
@@ -200,7 +203,7 @@ class ModelSpec extends ApiSpec:
 
     // Deleting models
     "not delete a model without the 'force' parameter" in {
-      Delete("/m/test/test-MODEL_123") ~> ModelResource.route ~> check {
+      Delete("/m/test/test-MODEL_123") ~> modelRoute ~> check {
         status should be (StatusCodes.BadRequest)
         val response = responseAs[ErrorResponse]
         response.error should include ("To really perform this action")
@@ -208,7 +211,7 @@ class ModelSpec extends ApiSpec:
       }
     }
     "not delete a model with the 'force' parameter not set to 1" in {
-      Delete("/m/test/test-MODEL_123?force=true") ~> ModelResource.route ~> check {
+      Delete("/m/test/test-MODEL_123?force=true") ~> modelRoute ~> check {
         status should be (StatusCodes.BadRequest)
         val response = responseAs[ErrorResponse]
         response.error should include ("To really perform this action")
@@ -216,31 +219,31 @@ class ModelSpec extends ApiSpec:
       }
     }
     "delete a model" in {
-      Delete("/m/test/test-MODEL_123?force=1") ~> ModelResource.route ~> check {
+      Delete("/m/test/test-MODEL_123?force=1") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         responseAs[SuccessResponse] shouldBe a [SuccessResponse]
       }
     }
     "delete a model with trailing slash" in {
-      Delete("/m/test/" + "0123456789".repeat(10) + "/?force=1") ~> ModelResource.route ~> check {
+      Delete("/m/test/" + "0123456789".repeat(10) + "/?force=1") ~> modelRoute ~> check {
         status should be (StatusCodes.OK)
         contentType should be (ContentTypes.`application/json`)
         responseAs[SuccessResponse] shouldBe a [SuccessResponse]
       }
     }
     "not delete a non-existent model" in {
-      Delete("/m/test/doesnotexist?force=1") ~> Route.seal(ModelResource.route) ~> check {
+      Delete("/m/test/doesnotexist?force=1") ~> modelRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "not delete a model in non-existent namespace" in {
-      Delete("/m/doesnotexist/model?force=1") ~> Route.seal(ModelResource.route) ~> check {
+      Delete("/m/doesnotexist/model?force=1") ~> modelRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }
     "not retrieve a deleted model" in {
-      Get("/m/test/test-MODEL_123?force=1") ~> Route.seal(ModelResource.route) ~> check {
+      Get("/m/test/test-MODEL_123?force=1") ~> modelRoute ~> check {
         status should be (StatusCodes.NotFound)
       }
     }

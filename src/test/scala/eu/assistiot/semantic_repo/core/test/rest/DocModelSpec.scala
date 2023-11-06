@@ -29,7 +29,7 @@ import scala.concurrent.duration.*
 class DocModelSpec extends DocGenSpec, Inspectors:
   val docResource = DocModelResource(systemInternal)
   val docRoute = Route.seal(
-    ModelVersionResource.route ~
+    ModelVersionResource(controllers.webhook).route ~
     docResource.route
   )
 
