@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  semantic-repository:
+  - apiVersion: v2
+    appVersion: 1.1.0
+    created: "2023-11-28T11:22:55.29110211+01:00"
+    description: Semantic Repository enabler
+    digest: ff9c944bcbeb9766e1e33e2f0e33152a45f0f47b3d7baaa558c1785075a72954
+    name: semantic-repository
+    type: application
+    urls:
+    - semantic-repository-1.1.0.tgz
+    version: 1.1.0
+generated: "2023-11-28T11:22:55.290706741+01:00"
